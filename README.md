@@ -90,7 +90,7 @@ ssh_hardening_mode: strict
 - ANSSI SSH Secure Use Recommendations  
 
 # License
-- MIT  
+- GPLv3  
 
 # Maintainers
 Guillaume A.  
