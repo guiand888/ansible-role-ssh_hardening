@@ -3,7 +3,7 @@ galaxy_info:
   description: Comprehensive SSH security hardening role with basic and strict compliance modes, NIST and ANSSI compliant
   company: Forward Systems
   issue_tracker_url: https://github.com/guiand888/ansible-role-ssh_hardening/issues
-  license: MIT
+  license: GPLv3
   min_ansible_version: 2.1
   galaxy_tags: []
     # List tags for your role here, one per line. A tag is a keyword that describes
