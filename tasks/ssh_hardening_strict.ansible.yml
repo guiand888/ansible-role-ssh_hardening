@@ -1,0 +1,263 @@
+- name: SSH Hardening Standards Information
+  ansible.builtin.debug:
+    msg: |
+      *******************************************************
+      This system is being configured to meet the following security standards:
+      - **NIST SP 800-53** (National Institute of Standards and Technology)
+      - **ANSSI** (Agence Nationale de la Sécurité des Systèmes d'Information)
+          (Open)SSH secure use recommendations / No DAT-NT-007-EN/ANSSI/SDE/NP
+
+      These standards mandate the following:
+      - Disabled TELNET, RSH, and RLOGIN remote access services
+      - SSHD only listens to administrative networks
+      - Disable root login, limit user access
+      - Empty passwords are not allowed
+      - Enforce key-based authentication for SSH (no passwords)
+      - Enforce SSH protocol 2
+      - Strict encryption algorithms (AES, SHA2)
+      - Enforcing session timeouts and logging
+      - Disable TCP and X11 forwarding
+      - Rate limiting SSH connection attempts to prevent brute-force attacks
+      - Enable last log display
+      *******************************************************
+
+- name: Ensure SSH ListenAddress configuration
+  block:
+    - name: Check ListenAddress configuration
+      ansible.builtin.shell: |
+        grep -E '^#?\s*ListenAddress' /etc/ssh/sshd_config
+      register: listen_address_check
+      changed_when: false
+      ignore_errors: true
+    - name: Uncomment and set ListenAddress if commented
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#\s*ListenAddress'
+        line: "ListenAddress {{ ansible_host }}"
+        state: present
+        backup: true
+      when:
+        - listen_address_check.rc != 0 or
+          (listen_address_check.stdout is defined and listen_address_check.stdout is match('^#\s*ListenAddress'))
+      notify:
+        - Restart SSH service RHEL based
+        - Restart SSH service Debian based
+    - name: Append Ansible host IP to ListenAddress if uncommented but not already present
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^ListenAddress'
+        line: "ListenAddress {{ ansible_host }}"
+        state: present
+        backup: true
+      when:
+        - listen_address_check.rc == 0
+        - listen_address_check.stdout is defined
+        - ansible_host not in listen_address_check.stdout
+      notify:
+        - Restart SSH service RHEL based
+        - Restart SSH service Debian based
+    - name: Debug ListenAddress configuration
+      ansible.builtin.debug:
+        msg: |
+          Current ListenAddress configuration:
+          {{ listen_address_check.stdout | default('No ListenAddress found') }}
+          Ansible connection IP: {{ ansible_host }}
+
+- name: Uninstall TELNET, RSH, and RLOGIN remote access servers
+  ansible.builtin.yum:
+    name:
+      - telnet
+      - rsh-server
+    state: absent
+
+- name: Disable root login for SSH
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin no'
+    state: present
+    backup: true
+
+- name: Restrict SSH access through AllowGroups
+  block:
+    - name: Ensure SSH allowed group exists
+      ansible.builtin.group:
+        name: "{{ ssh_allowed_group }}"
+        state: present
+    - name: Ensure Ansible user is in SSH allowed group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: "{{ ssh_allowed_group }}"
+        append: true
+    - name: Check current AllowGroups configuration
+      ansible.builtin.shell: |
+        grep -E '^#?\s*AllowGroups' /etc/ssh/sshd_config || echo "NOT_FOUND"
+      register: allow_groups_check
+      changed_when: false
+      check_mode: false
+    - name: Configure AllowGroups in sshd_config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?\s*AllowGroups'
+        line: "AllowGroups {{ ssh_allowed_group }}"
+        state: present
+        backup: true
+      when:
+        - allow_groups_check.stdout == 'NOT_FOUND' or
+          (allow_groups_check.stdout is defined and allow_groups_check.stdout is match('^#\s*AllowGroups'))
+      notify:
+        - Restart SSH service RHEL based
+        - Restart SSH service Debian based
+    - name: Append SSH allowed group if not already present
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^AllowGroups'
+        line: "AllowGroups {{ allow_groups_check.stdout.split()[1:] | join(' ') }} {{ ssh_allowed_group }}"
+        state: present
+        backup: true
+      when:
+        - allow_groups_check.stdout != 'NOT_FOUND'
+        - allow_groups_check.stdout is defined
+        - ssh_allowed_group not in allow_groups_check.stdout
+      notify:
+        - Restart SSH service RHEL based
+        - Restart SSH service Debian based
+    - name: Debug AllowGroups configuration
+      ansible.builtin.debug:
+        msg: |
+          Current AllowGroups configuration:
+          {{ allow_groups_check.stdout | default('No AllowGroups found') }}
+          SSH Allowed Group: {{ ssh_allowed_group }}
+
+- name: Enforce key-based authentication and disable password authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    state: present
+    backup: true
+
+- name: Ensure empty passwords are not allowed
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitEmptyPasswords'
+    line: 'PermitEmptyPasswords no'
+    state: present
+    backup: true
+
+- name: Ensure SSH only uses protocol 2
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?Protocol'
+    line: 'Protocol 2'
+    state: present
+    backup: true
+
+- name: Enforce strong ciphers and disable weak ones
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?Ciphers'
+    line: 'Ciphers aes256-ctr'
+    state: present
+    backup: true
+
+- name: Enforce strong MAC algorithms and disable weak ones
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?MACs'
+    line: 'MACs hmac-sha2-512'
+    state: present
+    backup: true
+
+- name: Set SSH session timeout (idle timeout)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?ClientAliveInterval'
+    line: "ClientAliveInterval {{ ssh_idle_timeout }}"
+    state: present
+    backup: true
+
+- name: Set SSH session idle disconnection (after timeout)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?ClientAliveCountMax'
+    line: "ClientAliveCountMax {{ ssh_idle_disconnect_threshold }}"
+    state: present
+    backup: true
+
+- name: Enable SSH logging and audit logging
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?LogLevel'
+    line: 'LogLevel VERBOSE'
+    state: present
+    backup: true
+
+- name: Enforce StrictModes for SSH file permission checking
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?StrictModes'
+    line: 'StrictModes yes'
+    state: present
+    backup: true
+
+- name: Enable privilege separation and use sandboxing
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?UsePrivilegeSeparation'
+    line: 'UsePrivilegeSeparation sandbox'
+    state: present
+    backup: true
+
+- name: Disable TCP forwarding (to limit potential attack surface)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?AllowTcpForwarding'
+    line: 'AllowTcpForwarding no'
+    state: present
+    backup: true
+
+- name: Disable X11 forwarding (to mitigate X11-based attacks)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?X11Forwarding'
+    line: 'X11Forwarding no'
+    state: present
+    backup: true
+
+- name: Enable last log display on SSH login
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PrintLastLog'
+    line: 'PrintLastLog yes'
+    state: present
+    backup: true
+
+- name: Implement rate limiting to prevent brute-force attacks (using fail2ban)
+  block:
+    - name: Install fail2ban package
+      ansible.builtin.package:
+        name: fail2ban
+        state: "{{ fail2ban_package_state | default('present') }}"
+    - name: Configure fail2ban SSH filter
+      block:
+        - name: Configure fail2ban SSH filter for Debian-based systems
+          when: ansible_os_family == "Debian"
+          ansible.builtin.template:
+            src: fail2ban_ssh_jail.j2
+            dest: /etc/fail2ban/jail.d/ssh.conf
+            mode: '0644'
+            backup: true
+        - name: Configure fail2ban SSH filter for RedHat-based systems
+          when: ansible_os_family == "RedHat"
+          ansible.builtin.template:
+            src: fail2ban_ssh_jail.j2
+            dest: /etc/fail2ban/jail.d/ssh.conf
+            mode: '0644'
+            backup: true
+
+    - name: Ensure fail2ban service is enabled and started
+      ansible.builtin.service:
+        name: fail2ban
+        enabled: "{{ fail2ban_service_enabled | default(true) }}"
+        state: "{{ fail2ban_service_state | default('started') }}"

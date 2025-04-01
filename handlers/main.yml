@@ -1,0 +1,14 @@
+---
+# handlers file for ./system_baseline/roles/ssh_hardening
+- name: Restart SSH service RHEL based
+  ansible.builtin.service:
+    name: sshd
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "RedHat"
+- name: Restart SSH service Debian based
+  ansible.builtin.service:
+    name: ssh
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "Debian"

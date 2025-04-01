@@ -1,0 +1,20 @@
+---
+# tasks file for ./system_baseline/roles/ssh_hardening
+- name: Basic SSH hardening
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags:
+    - ssh_hardening
+    - ssh_hardening_basic
+  ansible.builtin.include_tasks: ssh_hardening_basic.ansible.yml
+  when:
+    - ssh_hardening_mode is not defined or
+      ssh_hardening_mode == 'basic'
+- name: Strict SSH hardening
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags:
+    - never
+    - ssh_hardening_strict
+  ansible.builtin.include_tasks: ssh_hardening_strict.ansible.yml
+  when:
+    - ssh_hardening_mode is defined and
+      ssh_hardening_mode == 'strict'

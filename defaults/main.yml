@@ -1,0 +1,26 @@
+---
+# defaults file for ./system_baseline/roles/ssh_hardening
+
+# Strict hardening vars
+#######################
+# ssh_allowed_group:
+ssh_hardening_ssh_idle_timeout: 300
+ssh_hardening_ssh_idle_disconnect_threshold: 3
+
+## Fail2Ban Package Configuration
+ssh_hardening_fail2ban_package_state: present
+
+## Fail2Ban Service Configuration
+ssh_hardening_fail2ban_service_enabled: true
+ssh_hardening_fail2ban_service_state: started
+
+## SSH Jail Configuration
+ssh_hardening_fail2ban_ssh_enabled: true
+ssh_hardening_fail2ban_ssh_port: ssh
+ssh_hardening_fail2ban_ssh_filter: sshd
+ssh_hardening_fail2ban_ssh_max_retry: 5
+ssh_hardening_fail2ban_ssh_ban_time: 3600   # 1 hour
+ssh_hardening_fail2ban_ssh_find_time: 600   # 10 minutes
+
+## Additional Fail2Ban Global Settings (optional)
+ssh_hardening_fail2ban_loglevel: INFO

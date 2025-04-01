@@ -1,0 +1,8 @@
+[sshd]
+enabled  = {{ fail2ban_ssh_enabled | default('true') }}
+port     = {{ fail2ban_ssh_port | default('ssh') }}
+filter   = {{ fail2ban_ssh_filter | default('sshd') }}
+logpath  = {{ fail2ban_ssh_logpath | default(ansible_os_family == 'Debian' ? '/var/log/auth.log' : '/var/log/secure') }}
+maxretry = {{ fail2ban_ssh_max_retry | default(5) }}
+bantime  = {{ fail2ban_ssh_ban_time | default(3600) }}
+findtime = {{ fail2ban_ssh_find_time | default(600) }}
